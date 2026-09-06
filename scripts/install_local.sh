@@ -41,4 +41,12 @@ docker compose build
 sudo install -m 0644 "$unit_source" "$unit_target"
 sudo systemctl daemon-reload
 sudo systemctl enable --now ark-intel.service
-curl --fail --silent --show-error http://127.0.0.1:7010/health
+curl \
+  --fail \
+  --silent \
+  --show-error \
+  --retry 20 \
+  --retry-all-errors \
+  --retry-delay 1 \
+  --max-time 30 \
+  http://127.0.0.1:7010/health
