@@ -40,7 +40,10 @@ docker compose build
 
 sudo install -m 0644 "$unit_source" "$unit_target"
 sudo systemctl daemon-reload
-sudo systemctl enable --now ark-intel.service
+sudo systemctl enable ark-intel.service
+# A oneshot unit that is already active will not be started again by
+# `enable --now`; restart explicitly so token and feature-flag changes apply.
+sudo systemctl restart ark-intel.service
 curl \
   --fail \
   --silent \
