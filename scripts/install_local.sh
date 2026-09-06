@@ -33,6 +33,11 @@ else
 fi
 chmod 600 "$env_file"
 
+# Build before entering the hardened systemd sandbox. Docker Buildx writes
+# activity metadata below ~/.docker, which is intentionally read-only inside
+# the service unit.
+docker compose build
+
 sudo install -m 0644 "$unit_source" "$unit_target"
 sudo systemctl daemon-reload
 sudo systemctl enable --now ark-intel.service
