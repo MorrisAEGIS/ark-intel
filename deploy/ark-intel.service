@@ -1,0 +1,40 @@
+[Unit]
+Description=ArkIntel sovereign OSINT broker
+After=docker.service network-online.target
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=novaadmin
+Group=novaadmin
+WorkingDirectory=/home/novaadmin/ark-intel
+EnvironmentFile=/home/novaadmin/.config/ark-intel/env
+ExecStart=/usr/bin/docker compose up -d --build
+ExecStop=/usr/bin/docker compose down
+RemainAfterExit=yes
+TimeoutStartSec=180
+TimeoutStopSec=60
+
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+ReadOnlyPaths=/home/novaadmin/ark-intel
+ReadWritePaths=/home/novaadmin/ark-intel /home/novaadmin/.config/ark-intel
+
+[Install]
+WantedBy=multi-user.target
