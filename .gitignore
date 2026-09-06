@@ -40,8 +40,16 @@ scanner/
 # Data files
 threatfox.json
 
-# Dev scripts (one-time migration helpers)
-scripts/
+# Dev scripts (one-time migration helpers). Keep the governed installer.
+/scripts/*
+!/scripts/install_local.sh
+
+# Upstream generated/vendor artifacts are never committed in ARK branches.
+/intel/node_modules/
+**/__pycache__/
+*.pyc
+/data/
+/.venv/
 
 # AI agent config files
 CLAUDE.md
