@@ -1,0 +1,76 @@
+{
+  "schema_version": "ark.intel.source.v1",
+  "id": "noaa-alerts",
+  "label": "NOAA Weather Alerts",
+  "group": "Hazards",
+  "adapter": "noaa_alerts_v1",
+  "endpoint": {
+    "scheme": "https",
+    "hosts": [
+      "api.weather.gov"
+    ],
+    "path_prefixes": [
+      "/alerts/"
+    ],
+    "redirects": "deny"
+  },
+  "transport": {
+    "timeout_seconds": 8,
+    "max_compressed_bytes": 5242880,
+    "max_decompressed_bytes": 10485760,
+    "max_records": 2000,
+    "requests_per_minute": 6,
+    "max_concurrency": 1
+  },
+  "freshness": {
+    "poll_seconds": 90,
+    "stale_after_seconds": 300,
+    "expire_after_seconds": 900
+  },
+  "coverage": {
+    "kind": "global_reported",
+    "limitations": [
+      "source_defined_detection_and_reporting"
+    ]
+  },
+  "truth": {
+    "class": "reported",
+    "source_prior": 0.95,
+    "method_version": "ark.intel.confidence.v1"
+  },
+  "license": {
+    "identifier": "US-PD",
+    "terms_url": null,
+    "terms_retrieved_at": null,
+    "terms_sha256": null,
+    "commercial_use": "allowed",
+    "redistribution": "allowed",
+    "attribution": "none",
+    "retention": "allowed",
+    "reviewed_at": "2026-09-21",
+    "reviewed_by": "noah",
+    "approval_ref": null,
+    "notes": "US government public domain"
+  },
+  "privacy": {
+    "class": "public_event",
+    "personal_data": "none_expected"
+  },
+  "credentials": {
+    "class": "none"
+  },
+  "cost": {
+    "class": "free",
+    "monthly_budget_usd": null
+  },
+  "retention": {
+    "raw_hours": 24,
+    "normalized_days": 30
+  },
+  "failure_semantics": {
+    "empty_is_valid": true,
+    "notes": null
+  },
+  "availability": "ready",
+  "admission_note": null
+}
