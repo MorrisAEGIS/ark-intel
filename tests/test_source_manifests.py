@@ -5,10 +5,7 @@ provenance/disabled posture. No new source enabled.
 """
 from __future__ import annotations
 
-import json
 from pathlib import Path
-
-import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 from arkintel.manifest_loader import (  # noqa: E402
