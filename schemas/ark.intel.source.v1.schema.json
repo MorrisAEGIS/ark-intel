@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ark.intel.source.v1",
+  "title": "ARK Intel Source Admission Manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "id", "label", "group", "adapter", "endpoint", "transport",
+    "freshness", "coverage", "truth", "license", "privacy", "credentials",
+    "cost", "retention", "failure_semantics"
+  ],
+  "properties": {
+    "schema_version": { "const": "ark.intel.source.v1" },
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$", "minLength": 3, "maxLength": 64 },
+    "label": { "type": "string", "minLength": 1, "maxLength": 96 },
+    "group": { "type": "string", "enum": ["Hazards", "Movement", "Geopolitics", "Live Media", "Cyber", "Markets / Chain", "Infrastructure"] },
+    "adapter": { "type": "string", "pattern": "^[a-z0-9_]+_v[0-9]+$" },
+    "endpoint": {
+      "type": "object", "additionalProperties": false,
+      "required": ["scheme", "hosts", "path_prefixes", "redirects"],
+      "properties": {
+        "scheme": { "enum": ["https", "upstream"] },
+        "hosts": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "path_prefixes": { "type": "array", "items": { "type": "string", "pattern": "^/" } },
+        "redirects": { "enum": ["deny"] }
+      }
+    },
+    "transport": {
+      "type": "object", "additionalProperties": false,
+      "required": ["timeout_seconds", "max_compressed_bytes", "max_decompressed_bytes", "max_records", "requests_per_minute", "max_concurrency"],
+      "properties": {
+        "timeout_seconds": { "type": "integer", "minimum": 1, "maximum": 120 },
+        "max_compressed_bytes": { "type": "integer", "minimum": 1024 },
+        "max_decompressed_bytes": { "type": "integer", "minimum": 1024 },
+        "max_records": { "type": "integer", "minimum": 1 },
+        "requests_per_minute": { "type": "integer", "minimum": 1 },
+        "max_concurrency": { "type": "integer", "minimum": 1, "maximum": 4 }
+      }
+    },
+    "freshness": {
+      "type": "object", "additionalProperties": false,
+      "required": ["poll_seconds", "stale_after_seconds", "expire_after_seconds"],
+      "properties": {
+        "poll_seconds": { "type": "integer", "minimum": 15 },
+        "stale_after_seconds": { "type": "integer", "minimum": 30 },
+        "expire_after_seconds": { "type": "integer", "minimum": 60 }
+      }
+    },
+    "coverage": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "limitations"],
+      "properties": {
+        "kind": { "type": "string" },
+        "limitations": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "truth": {
+      "type": "object", "additionalProperties": false,
+      "required": ["class", "source_prior", "method_version"],
+      "properties": {
+        "class": { "enum": ["observed", "reported", "reference", "derived", "hypothesis"] },
+        "source_prior": { "type": "number", "minimum": 0, "maximum": 1 },
+        "method_version": { "const": "ark.intel.confidence.v1" }
+      }
+    },
+    "license": {
+      "type": "object", "additionalProperties": false,
+      "required": ["identifier", "commercial_use", "redistribution", "attribution", "retention", "reviewed_at"],
+      "properties": {
+        "identifier": { "type": "string" },
+        "terms_url": { "type": ["string", "null"] },
+        "terms_retrieved_at": { "type": ["string", "null"] },
+        "terms_sha256": { "anyOf": [ { "type": "string", "pattern": "^[0-9a-f]{64}$" }, { "type": "null" } ] },
+        "commercial_use": { "enum": ["allowed", "restricted", "prohibited", "unknown"] },
+        "redistribution": { "enum": ["allowed", "restricted", "prohibited", "unknown"] },
+        "attribution": { "enum": ["required", "recommended", "none"] },
+        "retention": { "enum": ["allowed", "restricted", "prohibited", "unknown"] },
+        "reviewed_at": { "type": "string" },
+        "reviewed_by": { "type": ["string", "null"] },
+        "approval_ref": { "type": ["string", "null"] },
+        "notes": { "type": ["string", "null"] }
+      }
+    },
+    "privacy": {
+      "type": "object", "additionalProperties": false,
+      "required": ["class", "personal_data"],
+      "properties": {
+        "class": { "type": "string" },
+        "personal_data": { "type": "string" }
+      }
+    },
+    "credentials": {
+      "type": "object", "additionalProperties": false,
+      "required": ["class"],
+      "properties": {
+        "class": { "enum": ["none", "api_token_governed"] },
+        "governance_note": { "type": ["string", "null"] }
+      }
+    },
+    "cost": {
+      "type": "object", "additionalProperties": false,
+      "required": ["class"],
+      "properties": {
+        "class": { "enum": ["free", "metered"] },
+        "monthly_budget_usd": { "type": ["number", "null"] }
+      }
+    },
+    "retention": {
+      "type": "object", "additionalProperties": false,
+      "required": ["raw_hours", "normalized_days"],
+      "properties": {
+        "raw_hours": { "type": "integer", "minimum": 0 },
+        "normalized_days": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "failure_semantics": {
+      "type": "object", "additionalProperties": false,
+      "required": ["empty_is_valid"],
+      "properties": {
+        "empty_is_valid": { "type": "boolean" },
+        "notes": { "type": ["string", "null"] }
+      }
+    },
+    "availability": { "enum": ["ready", "credential_required", "provenance_pending", "policy_disabled"] },
+    "admission_note": { "type": ["string", "null"] }
+  }
+}
