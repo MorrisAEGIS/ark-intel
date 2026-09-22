@@ -6,6 +6,7 @@ import asyncio
 import hashlib
 import json
 import time
+from pathlib import Path
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Awaitable, Callable
@@ -48,6 +49,12 @@ SOURCES: tuple[SourceDefinition, ...] = (
 
 SOURCE_INDEX = {source.id: source for source in SOURCES}
 READY_SOURCE_IDS = tuple(source.id for source in SOURCES if source.availability == "ready")
+_OBSERVATIONS: dict[str, list[dict[str, Any]]] = {}
+
+_MANIFEST_CACHE: dict[str, dict[str, Any]] = {}
+_MANIFEST_DIR = Path(__file__).resolve().parent / "manifests"
+
+
 _RAW_STORE = None
 _LAST_RETRIEVAL: dict[str, dict[str, str]] = {}
 
@@ -70,6 +77,57 @@ def _iso(value: Any = None) -> str:
     if isinstance(value, str) and value:
         return value
     return datetime.now(timezone.utc).isoformat()
+
+
+def _emit_observation(
+    source: SourceDefinition,
+    feature: dict[str, Any],
+    source_record_id: str,
+    digest: str,
+) -> dict[str, Any] | None:
+    """Emit the ark.intel.observation.v1 envelope for one legacy feature
+    (100x cutover-3). The envelope becomes the source of record for
+    observation identity; the legacy GeoJSON stays as the compatibility
+    projection. Emission failures are recorded, never fatal — the legacy
+    path must never break on envelope strictness."""
+    from .manifest_loader import manifest_digest as _md
+    from .observation import ObservationBuilder
+    retrieval = _LAST_RETRIEVAL.get(source.id)
+    raw_sha = retrieval.get("body_sha256") if retrieval else None
+    retrieval_id = retrieval.get("retrieval_id") if retrieval else None
+    if not raw_sha:
+        raw_sha = digest  # record-level digest fallback (pre-capture era)
+        retrieval_id = retrieval_id or "uncaptured"
+    manifest = _MANIFEST_CACHE.get(source.id)
+    if manifest is None:
+        try:
+            from .manifest_loader import load_manifest
+            _MANIFEST_CACHE[source.id] = manifest = load_manifest(
+                _MANIFEST_DIR / f"{source.id}.json")
+        except Exception:
+            return None  # no manifest = no envelope (honest absence)
+    builder = ObservationBuilder(
+        source_id=source.id,
+        adapter_version="legacy_projection_v1",
+        manifest=manifest,
+        manifest_digest=_md(manifest),
+        retrieval_id=str(retrieval_id),
+        raw_sha256=raw_sha,
+    )
+    try:
+        envelope = builder.emit(
+            record_id=str(source_record_id),
+            title=str(feature["properties"].get("title") or source.id),
+            observed_at=feature["properties"].get("observed_at"),
+            geometry_geojson=feature.get("geometry"),
+            detail_url=feature["properties"].get("source_url"),
+            attributes={k: v for k, v in feature["properties"].items()
+                        if k not in ("title", "observed_at", "source_url")},
+        )
+    except Exception:
+        return None
+    _OBSERVATIONS.setdefault(source.id, []).append(envelope)
+    return envelope
 
 
 def _feature(
@@ -108,7 +166,9 @@ def _feature(
         "evidence_pointer": f"arkintel://events/{event_id}#sha256={digest}",
         **(properties or {}),
     }
-    return {"type": "Feature", "id": event_id, "geometry": geometry, "properties": normalized}
+    feature = {"type": "Feature", "id": event_id, "geometry": geometry, "properties": normalized}
+    _emit_observation(source, feature, source_record_id, digest)
+    return feature
 
 
 async def _get_json(client: httpx.AsyncClient, source: SourceDefinition) -> Any:
