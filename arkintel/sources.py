@@ -48,6 +48,18 @@ SOURCES: tuple[SourceDefinition, ...] = (
 
 SOURCE_INDEX = {source.id: source for source in SOURCES}
 READY_SOURCE_IDS = tuple(source.id for source in SOURCES if source.availability == "ready")
+_RAW_STORE = None
+_LAST_RETRIEVAL: dict[str, dict[str, str]] = {}
+
+
+def _get_raw_store():
+    global _RAW_STORE
+    if _RAW_STORE is None:
+        from .raw_store import RawStore
+        _RAW_STORE = RawStore()
+    return _RAW_STORE
+
+
 _CACHE: dict[str, tuple[float, list[dict[str, Any]], dict[str, Any]]] = {}
 
 
@@ -106,12 +118,39 @@ async def _get_json(client: httpx.AsyncClient, source: SourceDefinition) -> Any:
     manifest bounds, rate/concurrency, circuit breaker — with sanitized
     failure codes only. Exact decoded bytes are captured for the bounded
     raw-evidence store before parsing."""
+    import uuid
+
+    from .manifest_loader import manifest_digest
     from .transport import get_governor
 
     gov = get_governor()
-    # The governor owns its own client; the passed-in client is unused on
-    # this path (kept in the signature for adapter-call compatibility).
-    return await gov.get_json(source.id, source.url)
+    retrieval_id = str(uuid.uuid4())
+    captured: dict[str, str] = {}
+
+    def _capture(source_id: str, body: bytes, status: int,
+                  content_type: str | None, content_encoding: str | None) -> None:
+        store = _get_raw_store()
+        manifest = gov.manifests[source_id]
+        rec = store.store(
+            retrieval_id=retrieval_id,
+            source_id=source_id,
+            body=body,
+            manifest=manifest,
+            response_status=status,
+            content_type=content_type,
+            content_encoding=content_encoding,
+        )
+        captured["body_sha256"] = rec["body_sha256"]
+        captured["retention_mode"] = rec["retention_mode"]
+
+    payload = await gov.get_json(source.id, source.url, on_body=_capture)
+    _LAST_RETRIEVAL[source.id] = {
+        "retrieval_id": retrieval_id,
+        "body_sha256": captured.get("body_sha256"),
+        "retention_mode": captured.get("retention_mode"),
+        "manifest_digest": manifest_digest(gov.manifests[source.id]),
+    }
+    return payload
 
 
 async def _usgs(client: httpx.AsyncClient, source: SourceDefinition) -> list[dict[str, Any]]:
@@ -232,6 +271,9 @@ async def fetch_source(source_id: str) -> tuple[list[dict[str, Any]], dict[str, 
         ) as client:
             events = await adapter(client, source)
         status = {"source_id": source.id, "status": "ready", "count": len(events), "cached": False}
+        retrieval = _LAST_RETRIEVAL.get(source.id)
+        if retrieval:
+            status["retrieval_evidence"] = retrieval
         _CACHE[source_id] = (time.monotonic(), events, status)
         return events, status
     except TransportPolicyError as tpe:

@@ -152,7 +152,7 @@ class TransportGovernor:
             st.circuit_open_until = time.monotonic() + backoff * (0.5 + random.random())
 
     # ── the fetch ────────────────────────────────────────────────────
-    async def get_json(self, source_id: str, url: str) -> Any:
+    async def get_json(self, source_id: str, url: str, *, on_body=None) -> Any:
         m = self.manifests[source_id]
         t = m["transport"]
         self._check_circuit(source_id)
@@ -182,6 +182,17 @@ class TransportGovernor:
                     raise TransportPolicyError("policy_content_type", source_id)
                 if len(response.text) > t["max_decompressed_bytes"]:
                     raise TransportPolicyError("policy_payload_oversize", source_id)
+                # W1.2 rule: exact decoded response-body bytes are handed to
+                # the capture hook BEFORE parsing or normalization — the
+                # evidence chain starts at the bytes, not at the parsed JSON.
+                if on_body is not None:
+                    on_body(
+                        source_id,
+                        response.content,
+                        response.status_code,
+                        response.headers.get("content-type"),
+                        response.headers.get("content-encoding"),
+                    )
                 self._record(source_id, True)
                 return response.json()
         except TransportPolicyError:
