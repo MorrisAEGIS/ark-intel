@@ -75,6 +75,7 @@ async def test_degraded_fetch_carries_policy_code_not_raw_exception(monkeypatch)
 
     monkeypatch.setattr(T, "get_governor", lambda: ExplodingGov())
     monkeypatch.setattr(S, "_get_raw_store", lambda: _NoopStore())
+    S._CACHE.clear()  # cache hygiene: never read another test's fetch
     events, status = await fetch_source("usgs-earthquakes")
     assert events == []
     assert status["status"] == "degraded"
