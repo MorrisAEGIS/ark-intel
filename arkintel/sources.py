@@ -10,6 +10,8 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Awaitable, Callable
 
+from .transport import TransportPolicyError
+
 import httpx
 
 from .config import get_settings
@@ -98,18 +100,18 @@ def _feature(
 
 
 async def _get_json(client: httpx.AsyncClient, source: SourceDefinition) -> Any:
-    settings = get_settings()
-    response = await client.get(
-        source.url,
-        headers={"Accept": "application/json", "User-Agent": "ArkIntel/0.1 (+https://github.com/MorrisAEGIS/ark-intel)"},
-    )
-    response.raise_for_status()
-    if len(response.content) > settings.source_max_bytes:
-        raise ValueError(f"source payload exceeds {settings.source_max_bytes} bytes")
-    content_type = response.headers.get("content-type", "")
-    if "json" not in content_type and not response.text.lstrip().startswith(("{", "[")):
-        raise ValueError("source did not return JSON")
-    return response.json()
+    """Governed fetch (100x cutover): the TransportGovernor enforces the
+    ark.intel.source.v1 manifest policy for every byte fetched from a
+    source — allowlist, redirects denied, post-resolution SSRF rejection,
+    manifest bounds, rate/concurrency, circuit breaker — with sanitized
+    failure codes only. Exact decoded bytes are captured for the bounded
+    raw-evidence store before parsing."""
+    from .transport import get_governor
+
+    gov = get_governor()
+    # The governor owns its own client; the passed-in client is unused on
+    # this path (kept in the signature for adapter-call compatibility).
+    return await gov.get_json(source.id, source.url)
 
 
 async def _usgs(client: httpx.AsyncClient, source: SourceDefinition) -> list[dict[str, Any]]:
@@ -232,8 +234,12 @@ async def fetch_source(source_id: str) -> tuple[list[dict[str, Any]], dict[str, 
         status = {"source_id": source.id, "status": "ready", "count": len(events), "cached": False}
         _CACHE[source_id] = (time.monotonic(), events, status)
         return events, status
+    except TransportPolicyError as tpe:
+        # sanitized failure codes only — no bodies/URLs/raw exceptions
+        return [], {"source_id": source.id, "status": "degraded",
+                    "detail": tpe.code, "count": 0, "cached": False}
     except Exception as exc:
-        return [], {"source_id": source.id, "status": "degraded", "detail": str(exc)[:240], "count": 0, "cached": False}
+        return [], {"source_id": source.id, "status": "degraded", "detail": str(exc)[:120], "count": 0, "cached": False}
 
 
 async def fetch_events(
