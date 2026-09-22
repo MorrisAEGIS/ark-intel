@@ -18,6 +18,21 @@ from arkintel.transport import TransportPolicyError
 
 MANIFESTS = Path(__file__).resolve().parents[1] / "arkintel" / "manifests"
 
+class _NoopStore:
+    def store(self, **kw):
+        return {"body_sha256": "0" * 64, "retention_mode": "digest_only"}
+
+    def get_body(self, rid):
+        return None
+
+    def catalog_row(self, rid):
+        return None
+
+    def stats(self):
+        return {}
+
+
+
 
 @pytest.mark.asyncio
 async def test_governed_get_json_passes_manifest_policy(monkeypatch) -> None:
@@ -25,13 +40,20 @@ async def test_governed_get_json_passes_manifest_policy(monkeypatch) -> None:
     calls = {}
 
     class FakeGov:
-        async def get_json(self, source_id, url):
+        def __init__(self):
+            from arkintel.manifest_loader import load_all_manifests
+            self.manifests = load_all_manifests(MANIFESTS)
+
+        async def get_json(self, source_id, url, *, on_body=None):
             calls["source_id"] = source_id
             calls["url"] = url
+            if on_body is not None:
+                on_body(source_id, b'{"features": []}', 200, "application/json", None)
             return {"features": []}
 
     import arkintel.transport as T
     monkeypatch.setattr(T, "get_governor", lambda: FakeGov())
+    monkeypatch.setattr(S, "_get_raw_store", lambda: _NoopStore())
     source = SOURCE_INDEX["usgs-earthquakes"]
     payload = await S._get_json(None, source)
     assert payload == {"features": []}
@@ -44,10 +66,15 @@ async def test_degraded_fetch_carries_policy_code_not_raw_exception(monkeypatch)
     import arkintel.transport as T
 
     class ExplodingGov:
-        async def get_json(self, source_id, url):
+        def __init__(self):
+            from arkintel.manifest_loader import load_all_manifests
+            self.manifests = load_all_manifests(MANIFESTS)
+
+        async def get_json(self, source_id, url, *, on_body=None):
             raise TransportPolicyError("policy_ip_blocked", source_id)
 
     monkeypatch.setattr(T, "get_governor", lambda: ExplodingGov())
+    monkeypatch.setattr(S, "_get_raw_store", lambda: _NoopStore())
     events, status = await fetch_source("usgs-earthquakes")
     assert events == []
     assert status["status"] == "degraded"
@@ -84,11 +111,16 @@ async def test_every_ready_source_parses_fixture_payloads_through_governor(monke
     }
 
     class FixtureGov:
-        async def get_json(self, source_id, url):
+        def __init__(self):
+            from arkintel.manifest_loader import load_all_manifests
+            self.manifests = load_all_manifests(MANIFESTS)
+
+        async def get_json(self, source_id, url, *, on_body=None):
             return fixtures[source_id]
 
     import arkintel.transport as T
     monkeypatch.setattr(T, "get_governor", lambda: FixtureGov())
+    monkeypatch.setattr(S, "_get_raw_store", lambda: _NoopStore())
     ready = [s for s in SOURCES if s.availability == "ready"]
     assert len(ready) == 9
     for source in ready:
